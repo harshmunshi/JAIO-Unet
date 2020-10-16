@@ -68,20 +68,21 @@ class VOCLoader(Dataset):
     3. Convert the mask from RGB to label_mask format.
     4. In __getitem__ return normalized image as image and label_mask for that image as the target
     """
-    def __init__(self, root_dir, test_mode=False, augmentations=None):
+    def __init__(self, root_dir, test_mode=False, split="train", augmentations=None):
         super(VOCLoader, self).__init__()
         # read the images as well as the labels, convert the labels in one hot format
         # This is the root dir <VOC_ROOT/VOC2012>
         self.root_dir = root_dir
         self.test_mode = test_mode
         self.n_class = 21
+        self.split = split
         self.augmentations = augmentations
         #self.mean = np.array([104.00699, 116.66877, 122.67892])
         self.files = collections.defaultdict()
         # join the paths <ImageSets/Segmentation> to the root directory
         if not self.test_mode:
             for split in ["train", "val", "trainval"]:
-                path = join(self.root, "ImageSets/Segmentation", split + ".txt")
+                path = join(self.root_dir, "ImageSets/Segmentation", split + ".txt")
                 file_list = tuple(open(path, "r"))
                 file_list = [id_.strip() for id_ in file_list]
                 self.files[split] = file_list
@@ -100,7 +101,7 @@ class VOCLoader(Dataset):
         """
         Encode the label masks from RGB to class one hot encoding
         """
-
+        mask = np.array(mask)
         mask = mask.astype(int)
         label_mask = np.zeros((mask.shape[0], mask.shape[1]), dtype=np.int16)
         for idx, label in enumerate(palette):
@@ -112,8 +113,10 @@ class VOCLoader(Dataset):
 
     def preprocess(self, name):
         # name is the path to that image and the label
-        label_path = join(root_dir, SegmentationClass)
-        img_path = join(root_dir, JPEFImages)
+        im_name = name + ".jpg"
+        seg_name = name + ".png"
+        label_path = join(self.root_dir, "SegmentationClass", seg_name)
+        img_path = join(self.root_dir, "JPEGImages", im_name)
         img = Image.open(img_path).convert("RGB")
         mask = Image.open(label_path).convert("RGB")
 
@@ -121,10 +124,10 @@ class VOCLoader(Dataset):
         # NOTE: Ideally at this point we have to resize the input image but
         # since the input and output dimensions are same for the respective masks, it doesn't matter
         img = self.tf(img)
-        mask = encode_mask(mask)
+        mask = self.encode_mask(mask)
 
         # convert the mask to a torch tensor
-        mask = torch.from_array(mask).long()
+        mask = torch.from_numpy(mask).long()
         mask[mask == 255] = 0
         return img, mask
     
@@ -141,17 +144,25 @@ class VOCLoader(Dataset):
             #index = np.random.choice(len(self.files["val"]), 1)[0]
             name = self.files["val"][idx]
         
-        image, mask = preprocess(name)
-        return image, mask        
+        image, mask = self.preprocess(name)
+        return image, mask    
 
-# load a sample image
-fixed_path = join()
-sample_img_path = fixed_path + "2010_005830.png"
-img = Image.open(sample_img_path).convert('RGB')
-to_mask(img)
+    def __len__(self):
+        return len(self.files[self.split])    
+
+# # load a sample image
+# fixed_path = join()
+# sample_img_path = fixed_path + "2010_005830.png"
+# img = Image.open(sample_img_path).convert('RGB')
+# to_mask(img)
 
 def unit_test():
-    raise NotImplementedError()
+    root_dir = "/home/harshmunshi/JAIO-Unet/Unet/data/VOCdevkit/VOC2012"
+    loader = VOCLoader(root_dir)
+    trainloader = DataLoader(loader, batch_size=1)
+    for i, data in enumerate(trainloader):
+        print(i, data)
+
 
 if __name__=="__main__":
     unit_test()
